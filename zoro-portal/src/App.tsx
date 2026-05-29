@@ -44,7 +44,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <PageLoader />
-  if (!user || user.role !== 'admin') return <Navigate to="/dashboard" replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+function UserRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role === 'admin') return <Navigate to="/admin-x9k2" replace />
   return <>{children}</>
 }
 
@@ -61,7 +70,7 @@ function AnimatedRoutes() {
         <Suspense fallback={<PageLoader />}>
           <Routes location={location}>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<UserRoute><DashboardPage /></UserRoute>} />
             <Route path="/faq" element={<ProtectedRoute><FAQPage /></ProtectedRoute>} />
             <Route path="/doubts" element={<ProtectedRoute><DoubtSolverPage /></ProtectedRoute>} />
             <Route path="/zoro" element={<ProtectedRoute><ZoroPage /></ProtectedRoute>} />
@@ -83,6 +92,8 @@ function Layout() {
   const { user, loading } = useAuth()
   if (loading) return <PageLoader />
   if (!user) return <AnimatedRoutes />
+  // Admins see only the admin layout, no Navbar/MiniZoro
+  if (user.role === 'admin') return <AnimatedRoutes />
   return (
     <>
       <Navbar />

@@ -20,7 +20,7 @@ export const LoginPage = memo(function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [shake, setShake] = useState(false)
-  const { login } = useAuth()
+  const { user, login } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -35,9 +35,9 @@ export const LoginPage = memo(function LoginPage() {
       setLoading(false)
     } else {
       toast.success('Welcome back!')
-      navigate('/dashboard')
+      navigate(user?.role === 'admin' ? '/admin-x9k2' : '/dashboard')
     }
-  }, [username, password, login, navigate])
+  }, [username, password, login, navigate, user?.role])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
