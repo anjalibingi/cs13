@@ -1,4 +1,4 @@
-import { useState, useCallback, memo, useEffect } from 'react'
+import { useState, useCallback, memo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Heart, CheckCircle2, MessageSquare, Loader2, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -169,21 +169,30 @@ export const DoubtSolverPage = memo(function DoubtSolverPage() {
   const [activeAnswer, setActiveAnswer] = useState('')
   const [answerFilter, setAnswerFilter] = useState<FilterType>('all')
 
+  // Load all doubts once on mount
   useEffect(() => {
     setDoubtList(getDoubts())
     setLoading(false)
+  }, [])
 
+  // Sync store changes for the currently open doubt detail
+  const detailIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    detailIdRef.current = detailId
+  }, [detailId])
+
+  useEffect(() => {
     return onMockStoreChange(() => {
       const nextDoubts = getDoubts()
       setDoubtList(nextDoubts)
 
-      if (detailId !== null) {
-        const nextDetail = nextDoubts.find(doubt => doubt.id === detailId) ?? null
+      if (detailIdRef.current !== null) {
+        const nextDetail = nextDoubts.find(doubt => doubt.id === detailIdRef.current) ?? null
         setDetail(nextDetail)
         setAnswers(nextDetail?.answers ?? [])
       }
     })
-  }, [detailId])
+  }, [])
 
   const openDetail = useCallback((id: number) => {
     setDetailId(id)
