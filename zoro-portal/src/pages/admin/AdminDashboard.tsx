@@ -1,40 +1,52 @@
 import { memo, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { MessageSquare, Users, HelpCircle, TrendingUp, CheckCircle, Clock, XCircle, ArrowRight } from 'lucide-react'
+import { MessageSquare, Users, HelpCircle, TrendingUp, CheckCircle, Clock, ArrowRight, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { admin } from '../../lib/api'
 
-interface Stats {
-  total: number; resolved: number; pending: number
-  feedback: number; users: number; faqs: number
+interface PendingItem {
+  id: number
+  type: 'doubt' | 'answer'
+  title: string
+  body: string
+  creator_name: string
+  created_at: string
+  status: string
 }
 
-
-interface PendingItem { id: number; type: string; title: string; body: string; creator_name: string; created_at: string }
-
 const STAT_CARDS = [
-  { label: 'Total Doubts',    key: 'total',    Icon: MessageSquare, color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
-  { label: 'Pending Review',  key: 'pending',  Icon: Clock,         color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
-  { label: 'Resolved',        key: 'resolved', Icon: CheckCircle,   color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
-  { label: 'Feedback',        key: 'feedback', Icon: TrendingUp,    color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
-  { label: 'Users',           key: 'users',    Icon: Users,         color: '#ec4899', bg: 'rgba(236,72,153,0.12)' },
-  { label: 'FAQs',            key: 'faqs',     Icon: HelpCircle,    color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  { label: 'Pending Doubts',  key: 'pendingD',  Icon: Clock,         color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+  { label: 'Pending Answers', key: 'pendingAns', Icon: MessageSquare, color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+  { label: 'Approved',        key: 'approved',   Icon: CheckCircle,   color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+  { label: 'Rejected',        key: 'rejectedD',  Icon: CheckCircle,   color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  { label: 'Total SP',        key: 'totalSP',    Icon: Zap,           color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+  { label: 'Users',           key: 'users',      Icon: Users,         color: '#ec4899', bg: 'rgba(236,72,153,0.12)' },
 ]
 
 export const AdminDashboard = memo(function AdminDashboard() {
   const navigate = useNavigate()
-  const [stats, setStats] = useState<Stats>({ total: 0, resolved: 0, pending: 0, feedback: 0, users: 0, faqs: 0 })
+  const [stats, setStats] = useState<any>({})
   const [recentPending, setRecentPending] = useState<PendingItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       admin.stats(),
+      admin.doubts(),
       admin.listAnswers(),
-    ]).then(([{ data }, { data: ansData }]) => {
+    ]).then(([{ data }, { data: doubtData }, { data: ansData }]) => {
       setStats(data)
-      const pending = (ansData.answers || []).filter((a: any) => a.status === 'pending')
-      setRecentPending(pending.slice(0, 5))
+      const pendingD = (doubtData.doubts || []).filter((d: any) => d.status === 'pending').slice(0, 3).map((d: any) => ({
+        id: d.id, type: 'doubt' as const, title: d.title, body: d.body,
+        creator_name: d.creator_name, created_at: d.created_at, status: d.status,
+      }))
+      const pendingA = (ansData.answers || []).filter((a: any) => a.status === 'pending').slice(0, 3).map((a: any) => ({
+        id: a.id, type: 'answer' as const, title: a.doubt_title, body: a.body,
+        creator_name: a.creator_name, created_at: a.created_at, status: a.status,
+      }))
+      setRecentPending([...pendingD, ...pendingA].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ).slice(0, 6))
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -64,7 +76,7 @@ export const AdminDashboard = memo(function AdminDashboard() {
               <Icon size={16} style={{ color }} />
             </div>
             <p className="text-white/30 text-xs mb-1">{label}</p>
-            <p className="text-white text-2xl font-bold">{loading ? '—' : (stats as any)[key] ?? 0}</p>
+            <p className="text-white text-2xl font-bold">{loading ? '—' : (stats[key] ?? 0)}</p>
           </motion.div>
         ))}
       </div>
@@ -92,26 +104,36 @@ export const AdminDashboard = memo(function AdminDashboard() {
           {recentPending.length === 0 ? (
             <div className="text-center py-10">
               <CheckCircle size={32} className="text-green-400/40 mx-auto mb-2" />
-              <p className="text-white/30 text-sm">All caught up — no pending items</p>
+              <p className="text-white/30 text-sm">All caught up — nothing pending</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {recentPending.map((item: any, i) => (
-                <motion.div key={item.id}
+              {recentPending.map((item, i) => (
+                <motion.div
+                  key={`${item.type}-${item.id}`}
                   className="flex items-start gap-3 p-3 rounded-xl"
                   style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.12)' }}
                   initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <span className="text-yellow-400/70 text-xs font-medium">{item.creator_name}</span>
                       <span className="text-white/15 text-xs">·</span>
                       <span className="text-white/25 text-xs">{new Date(item.created_at).toLocaleDateString()}</span>
                     </div>
-                    <p className="text-white/70 text-xs truncate">{item.body || item.title}</p>
+                    <p className="text-white/70 text-xs line-clamp-1">{item.type === 'doubt' ? item.title : item.body}</p>
+                    {item.type === 'answer' && item.title && (
+                      <p className="text-white/30 text-xs mt-0.5 truncate italic">Re: {item.title}</p>
+                    )}
                   </div>
-                  <span className="bg-yellow-400/10 text-yellow-400 text-xs px-2 py-0.5 rounded-full flex-shrink-0">Answer</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    item.type === 'doubt'
+                      ? 'bg-purple-400/15 text-purple-400'
+                      : 'bg-blue-400/15 text-blue-400'
+                  }`}>
+                    {item.type === 'doubt' ? 'Doubt' : 'Answer'}
+                  </span>
                 </motion.div>
               ))}
             </div>
@@ -126,10 +148,12 @@ export const AdminDashboard = memo(function AdminDashboard() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: 'Review Pending', sub: `${recentPending.length} to review`, color: '#fbbf24', action: () => navigate('/admin-x9k2/moderation') },
-              { label: 'Manage FAQs', sub: `${stats.faqs} total`, color: '#7c3aed', action: () => navigate('/admin-x9k2/moderation') },
-              { label: 'User Activity', sub: `${stats.users} users`, color: '#ec4899', action: () => navigate('/admin-x9k2/users') },
-              { label: 'Mod Logs', sub: 'View history', color: '#06b6d4', action: () => navigate('/admin-x9k2/logs') },
+              { label: 'Doubts',       sub: `${stats.pendingD || 0} pending`, color: '#7c3aed', action: () => navigate('/admin-x9k2/moderation') },
+              { label: 'Answers',      sub: `${stats.pendingAns || 0} pending`, color: '#3b82f6', action: () => navigate('/admin-x9k2/moderation') },
+              { label: 'Users & SP',   sub: `${stats.users || 0} users`, color: '#ec4899', action: () => navigate('/admin-x9k2/users') },
+              { label: 'Mod Logs',     sub: 'Audit trail', color: '#06b6d4', action: () => navigate('/admin-x9k2/logs') },
+              { label: 'SP Trans.',    sub: 'SP history', color: '#fbbf24', action: () => navigate('/admin-x9k2/sp') },
+              { label: 'All Pending',  sub: `${(stats.pendingD || 0) + (stats.pendingAns || 0)} total`, color: '#fbbf24', action: () => navigate('/admin-x9k2/moderation') },
             ].map(({ label, sub, color, action }) => (
               <motion.button key={label} onClick={action}
                 className="text-left p-4 rounded-xl transition-all hover:scale-[1.02]"

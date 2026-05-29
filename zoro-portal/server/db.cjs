@@ -266,6 +266,47 @@ async function initDb() {
     }
   } catch (e) { console.log('sp_transactions table creation skipped:', e.message) }
 
+  // Migration: add status column to doubts table
+  try {
+    const cols = db.exec("PRAGMA table_info(doubts)")[0]
+    if (cols && !cols.values.some(row => row[1] === 'status')) {
+      console.log('Migrating doubts table to add status column...')
+      db.run("ALTER TABLE doubts ADD COLUMN status TEXT DEFAULT 'pending'")
+      // Migrate existing 'open' doubts to 'pending'
+      db.run("UPDATE doubts SET status = 'pending' WHERE status = 'open'")
+      console.log('✅ doubts.status migration complete')
+    }
+  } catch (e) { console.log('doubts.status migration skipped:', e.message) }
+
+  // Migration: add rejection_reason to doubts
+  try {
+    const cols = db.exec("PRAGMA table_info(doubts)")[0]
+    if (cols && !cols.values.some(row => row[1] === 'rejection_reason')) {
+      console.log('Migrating doubts table to add rejection_reason...')
+      db.run('ALTER TABLE doubts ADD COLUMN rejection_reason TEXT')
+      console.log('✅ doubts.rejection_reason migration complete')
+    }
+  } catch (e) { console.log('doubts.rejection_reason migration skipped:', e.message) }
+
+  // Migration: create moderation_logs table
+  try {
+    const existing = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='moderation_logs'")[0]
+    if (!existing) {
+      console.log('Creating moderation_logs table...')
+      db.run(`CREATE TABLE moderation_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        moderator_id INTEGER NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        detail TEXT,
+        sp_delta INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`)
+      console.log('✅ moderation_logs table created')
+    }
+  } catch (e) { console.log('moderation_logs table creation skipped:', e.message) }
+
   console.log('✅ Database initialized')
   return db
 }

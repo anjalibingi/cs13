@@ -50,9 +50,12 @@ export const admin = {
   generateAnswer: (doubt: string) => api.post('/admin/generate-answer', { doubt }),
   updateAnswerStatus: (id: number, status: 'pending' | 'approved' | 'rejected', rejection_reason?: string) =>
     api.patch(`/admin/answers/${id}/status`, { status, rejection_reason }),
+  updateDoubtStatus: (id: number, status: 'pending' | 'approved' | 'rejected' | 'resolved', rejection_reason?: string) =>
+    api.patch(`/admin/doubts/${id}/status`, { status, rejection_reason }),
   listAnswers: () => api.get('/admin/answers'),
   spStats: () => api.get('/admin/sp-stats'),
   spHistory: (userId: number) => api.get(`/admin/sp-history/${userId}`),
   spTransactions: (userId?: number) =>
     api.get(userId ? `/admin/sp-transactions?user_id=${userId}` : '/admin/sp-transactions'),
+  moderationLogs: () => api.get('/admin/moderation-logs'),
 }
