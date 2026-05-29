@@ -11,6 +11,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const FAQPage = lazy(() => import('./pages/FAQPage'))
 const DoubtSolverPage = lazy(() => import('./pages/DoubtSolverPage'))
 const ZoroPage = lazy(() => import('./pages/ZoroPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const ModerationPage = lazy(() => import('./pages/admin/ModerationPage'))
@@ -49,14 +50,6 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function UserRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
-  if (loading) return <PageLoader />
-  if (!user) return <Navigate to="/login" replace />
-  if (user.role === 'admin') return <Navigate to="/admin-x9k2" replace />
-  return <>{children}</>
-}
-
 function AnimatedRoutes() {
   const location = useLocation()
   return (
@@ -70,10 +63,11 @@ function AnimatedRoutes() {
         <Suspense fallback={<PageLoader />}>
           <Routes location={location}>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<UserRoute><DashboardPage /></UserRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/faq" element={<ProtectedRoute><FAQPage /></ProtectedRoute>} />
             <Route path="/doubts" element={<ProtectedRoute><DoubtSolverPage /></ProtectedRoute>} />
             <Route path="/zoro" element={<ProtectedRoute><ZoroPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
             <Route path="/admin-x9k2" element={<AdminRoute><AdminLayout /></AdminRoute>}>
               <Route index element={<AdminDashboard />} />
               <Route path="moderation" element={<ModerationPage />} />

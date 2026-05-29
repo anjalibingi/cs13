@@ -5,8 +5,8 @@ import toast from 'react-hot-toast'
 import { PageTransition } from '../components/PageTransition'
 import { ListSkeleton, Skeleton } from '../components/Skeleton'
 import { useConfetti } from '../components/Confetti'
-import { doubts as doubtApi, admin as adminApi } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { createAnswer, createDoubt, getDoubt, getDoubts, onMockStoreChange, resolveDoubt, updateAnswerStatus, upvoteAnswer } from '../lib/mockStore'
 import type { Doubt, Answer } from '../types'
 
 type AnswerStatus = 'pending' | 'approved' | 'rejected'
@@ -60,11 +60,13 @@ function AnswerCard({
   isAdmin,
   onApprove,
   onReject,
+  onUpvote,
 }: {
   answer: Answer
   isAdmin: boolean
   onApprove: (id: number) => void
   onReject: (id: number) => void
+  onUpvote: (id: number) => void
 }) {
   const [loading, setLoading] = useState(false)
 
@@ -74,365 +76,377 @@ function AnswerCard({
     setLoading(false)
   }
   const handleReject = async () => {
-    setLoading(false)
+    setLoading(true)
     await onReject(answer.id)
+    setLoading(false)
   }
 
   const isPending = answer.status === 'pending'
-  const isApproved = answer.status === 'approved'
 
   return (
-    <motion.div
-      className={`relative rounded-2xl p-4 transition-all border ${
-        answer.status === 'pending'   ? 'border-yellow-400/25 bg-yellow-400/5' :
-        answer.status === 'approved'  ? 'border-green-400/25 bg-green-400/5' :
-                                        'border-red-400/25 bg-red-400/5'
-      }`}
-      initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ type: 'spring', stiffness: 260, damping: 25 }}
-    >
-      {/* Status bar accent */}
-      <div className={`absolute top-0 left-4 right-4 h-px rounded-full ${
-        answer.status === 'pending'   ? 'bg-yellow-400/40' :
-        answer.status === 'approved'  ? 'bg-green-400/40' :
-                                        'bg-red-400/40'
-      }`} />
-
-      <div className="flex items-start gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <StatusBadge status={answer.status} />
-            <span className="text-white/25 text-xs">·</span>
-            <span className="text-white/40 text-xs">{answer.creator_name}</span>
-            <span className="text-white/20 text-xs">·</span>
-            <span className="text-white/30 text-xs">{new Date(answer.created_at).toLocaleDateString()}</span>
-            {isApproved && (
-              <>
-                <span className="text-white/25 text-xs">·</span>
-                <span className="flex items-center gap-1 text-yellow-400/80 text-xs font-semibold">
-                  ⚡ +10 SP awarded
-                </span>
-              </>
-            )}
-          </div>
-
-          <p className="text-white/80 text-sm leading-relaxed">{answer.body}</p>
+    <div className={`rounded-2xl p-4 transition-all ${isPending ? 'bg-white/[0.04] border border-[#7c3aed]/20' : 'bg-white/[0.02] border border-white/5'}`}>
+      <div className="flex gap-3">
+        {/* Avatar */}
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold"
+          style={{
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.2))',
+            border: '1px solid rgba(124,58,237,0.3)',
+            color: '#a78bfa',
+          }}>
+          {(answer.creator_name || 'U')[0].toUpperCase()}
         </div>
 
-        {isPending && isAdmin && (
-          <div className="flex flex-col gap-2 flex-shrink-0">
-            {loading ? (
-              <Loader2 size={16} className="text-white/30 animate-spin mx-auto" />
-            ) : (
-              <>
-                <motion.button
-                  onClick={handleApprove}
-                  title="Approve (+10 SP)"
-                  className="w-8 h-8 rounded-xl bg-green-500/20 border border-green-500/30 flex items-center justify-center text-green-400 hover:bg-green-500/35 hover:shadow-lg hover:shadow-green-500/20 transition-all"
-                  whileTap={{ scale: 0.88 }}
-                >
-                  <CheckCircle size={14} />
-                </motion.button>
-                <motion.button
-                  onClick={handleReject}
-                  title="Reject"
-                  className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center text-red-400 hover:bg-red-500/25 hover:shadow-lg hover:shadow-red-500/15 transition-all"
-                  whileTap={{ scale: 0.88 }}
-                >
-                  <XCircle size={14} />
-                </motion.button>
-              </>
-            )}
+        <div className="flex-1 min-w-0">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-white/60 text-xs">{answer.creator_name}</span>
+            <StatusBadge status={answer.status} />
           </div>
-        )}
 
-        {!isPending && (
-          <div className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-xl ${
-            isApproved
-              ? 'bg-green-500/15 border border-green-500/25'
-              : 'bg-red-500/10 border border-red-500/20'
-          }`}>
-            {isApproved
-              ? <CheckCircle size={14} className="text-green-400" />
-              : <XCircle size={14} className="text-red-400" />
-            }
-          </div>
-        )}
-      </div>
+          {/* Body */}
+          <p className="text-white/80 text-sm leading-relaxed">{answer.body}</p>
 
-      <div className="flex items-center gap-3 mt-3 ml-0.5">
-        <motion.button
-          className="flex items-center gap-1.5 text-white/35 hover:text-[#ec4899] text-xs transition-colors"
-          whileTap={{ scale: 0.9 }}
-        >
-          <Heart size={12} /> {answer.upvotes}
-        </motion.button>
-        {answer.is_accepted === 1 && (
-          <span className="flex items-center gap-1 text-green-400 text-xs">
-            <CheckCircle2 size={12} /> Accepted
-          </span>
-        )}
-        <span className="ml-auto text-white/20 text-xs">
-          {answer.status === 'pending' ? '⏳ Awaiting review' :
-           answer.status === 'approved' ? '✅ Approved' : '✗ Rejected'}
-        </span>
+          {/* Footer actions */}
+          {isAdmin && isPending && (
+            <div className="flex items-center gap-2 mt-3">
+              <motion.button
+                onClick={handleApprove}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/15 text-green-400 hover:bg-green-500/25 border border-green-400/20 disabled:opacity-40"
+                whileTap={{ scale: 0.95 }}
+              >
+                {loading ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle size={11} />}
+                Approve
+              </motion.button>
+              <motion.button
+                onClick={handleReject}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-400/20 disabled:opacity-40"
+                whileTap={{ scale: 0.95 }}
+              >
+                {loading ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />}
+                Reject
+              </motion.button>
+            </div>
+          )}
+
+          {!isAdmin && (
+            <div className="flex items-center gap-3 mt-3 ml-0.5">
+              <motion.button
+                onClick={() => onUpvote(answer.id)}
+                className="flex items-center gap-1.5 text-white/35 hover:text-[#ec4899] text-xs transition-colors"
+                whileTap={{ scale: 0.9 }}
+              >
+                <Heart size={13} /> {answer.upvotes}
+              </motion.button>
+              {answer.is_accepted === 1 && (
+                <span className="flex items-center gap-1 text-green-400 text-xs">
+                  <CheckCircle2 size={13} /> Accepted
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </motion.div>
+    </div>
   )
 }
 
 export const DoubtSolverPage = memo(function DoubtSolverPage() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
-
-  const [doubts, setDoubts] = useState<Doubt[]>([])
+  const fireConfetti = useConfetti()
+  const [doubtCount, setDoubtCount] = useState(0)
+  const [doubtList, setDoubtList] = useState<Doubt[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
   const [detail, setDetail] = useState<Doubt | null>(null)
   const [answers, setAnswers] = useState<Answer[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [activeAnswer, setActiveAnswer] = useState('')
   const [answerFilter, setAnswerFilter] = useState<FilterType>('all')
-  const fireConfetti = useConfetti()
 
   useEffect(() => {
-    doubtApi.list().then(({ data }) => { setDoubts(data.doubts); setLoading(false) }).catch(() => setLoading(false))
-  }, [])
+    setDoubtList(getDoubts())
+    setLoading(false)
 
-  const openDetail = useCallback(async (id: number) => {
+    return onMockStoreChange(() => {
+      const nextDoubts = getDoubts()
+      setDoubtList(nextDoubts)
+
+      if (detailId !== null) {
+        const nextDetail = nextDoubts.find(doubt => doubt.id === detailId) ?? null
+        setDetail(nextDetail)
+        setAnswers(nextDetail?.answers ?? [])
+      }
+    })
+  }, [detailId])
+
+  const openDetail = useCallback((id: number) => {
     setDetailId(id)
     setDetailLoading(true)
     setAnswerFilter('all')
-    try {
-      const { data } = await doubtApi.get(id)
-      setDetail(data.doubt)
-      setAnswers(data.answers)
-    } catch { toast.error('Failed to load') }
+    const nextDetail = getDoubt(id)
+    setDetail(nextDetail)
+    setAnswers(nextDetail?.answers ?? [])
     setDetailLoading(false)
   }, [])
 
-  const handleApprove = useCallback(async (answerId: number) => {
-    try {
-      const { data } = await adminApi.updateAnswerStatus(answerId, 'approved')
-      setAnswers(prev => prev.map(a => a.id === answerId ? data.answer : a))
-      toast.success('✅ Answer approved! +10 SP awarded')
-    } catch { toast.error('Failed to approve') }
+  const handleApprove = useCallback((answerId: number) => {
+    const updatedAnswer = updateAnswerStatus(answerId, 'approved')
+    if (!updatedAnswer) {
+      toast.error('Failed to approve')
+      return
+    }
+    setAnswers(prev => prev.map(a => a.id === answerId ? updatedAnswer : a))
+    toast.success('Answer approved')
   }, [])
 
-  const handleReject = useCallback(async (answerId: number) => {
-    try {
-      const { data } = await adminApi.updateAnswerStatus(answerId, 'rejected')
-      setAnswers(prev => prev.map(a => a.id === answerId ? data.answer : a))
-      toast.success('✗ Answer rejected')
-    } catch { toast.error('Failed to reject') }
+  const handleReject = useCallback((answerId: number) => {
+    const updatedAnswer = updateAnswerStatus(answerId, 'rejected')
+    if (!updatedAnswer) {
+      toast.error('Failed to reject')
+      return
+    }
+    setAnswers(prev => prev.map(a => a.id === answerId ? updatedAnswer : a))
+    toast.success('Answer rejected')
   }, [])
 
   const submitDoubt = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !body.trim()) return
+    if (!title.trim() || !body.trim() || !user) return
     setSubmitting(true)
-    try {
-      const { data } = await doubtApi.create(title, body)
-      setDoubts(prev => [data.doubt, ...prev])
-      setModalOpen(false); setTitle(''); setBody('')
-      toast.success('Doubt raised!')
-    } catch { toast.error('Failed to raise doubt') }
+    createDoubt(title, body, user)
+    setDoubtList(getDoubts())
+    setModalOpen(false); setTitle(''); setBody('')
+    toast.success('Doubt raised!')
     setSubmitting(false)
-  }, [title, body])
+  }, [title, body, user])
 
   const submitAnswer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!activeAnswer.trim() || detailId === null) return
+    if (!activeAnswer.trim() || detailId === null || !user) return
     setDetailLoading(true)
-    try {
-      const { data } = await doubtApi.answer(detailId, activeAnswer)
-      setAnswers(prev => [...prev, data.answer])
-      setActiveAnswer('')
-      toast.success('Answer posted!')
-    } catch { toast.error('Failed to post answer') }
+    createAnswer(detailId, activeAnswer, user)
+    const nextDetail = getDoubt(detailId)
+    setDetail(nextDetail)
+    setAnswers(nextDetail?.answers ?? [])
+    setActiveAnswer('')
+    toast.success('Answer submitted for admin review')
     setDetailLoading(false)
-  }, [activeAnswer, detailId])
+  }, [activeAnswer, detailId, user])
 
   const handleUpvote = useCallback(async (answerId: number) => {
-    setAnswers(prev => prev.map(a => a.id === answerId ? { ...a, upvotes: a.upvotes + 1 } : a))
-    try {
-      await doubtApi.upvote(answerId)
-      toast.success('+5 SP points!')
-    } catch { toast.error('Upvote failed') }
-  }, [])
+    upvoteAnswer(answerId)
+    if (detailId !== null) {
+      const nextDetail = getDoubt(detailId)
+      setDetail(nextDetail)
+      setAnswers(nextDetail?.answers ?? [])
+    }
+    toast.success('Upvoted')
+  }, [detailId])
 
   const handleResolve = useCallback(async () => {
     if (!detailId) return
-    try {
-      await doubtApi.resolve(detailId)
-      setDoubts(prev => prev.map(d => d.id === detailId ? { ...d, status: 'resolved' } : d))
-      if (detail) setDetail({ ...detail, status: 'resolved' })
-      fireConfetti()
-      toast.success('Resolved! +20 SP points!')
-    } catch { toast.error('Failed to resolve') }
+    resolveDoubt(detailId)
+    setDoubtList(prev => prev.map(d => d.id === detailId ? { ...d, status: 'resolved' } : d))
+    if (detail) setDetail({ ...detail, status: 'resolved' })
+    fireConfetti()
+    toast.success('Marked as resolved')
   }, [detailId, detail, fireConfetti])
 
   const filteredAnswers = answerFilter === 'all'
     ? answers
     : answers.filter(a => a.status === answerFilter)
 
-  const answerCounts = {
-    all: answers.length,
-    pending: answers.filter(a => a.status === 'pending').length,
-    approved: answers.filter(a => a.status === 'approved').length,
-    rejected: answers.filter(a => a.status === 'rejected').length,
-  }
+  const isAdmin = user?.role === 'admin'
 
   return (
     <PageTransition>
-      <div className="px-6 py-8 max-w-4xl mx-auto">
+      <div className="cosmic-bg"><div className="stars" /></div>
+      <main className="relative z-10 max-w-4xl mx-auto px-6 py-8">
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-3xl text-white font-bold">Doubt Solver</h2>
-            <p className="text-white/40 text-sm mt-1">
-              {isAdmin ? 'Review and moderate answers' : 'Help each other, earn SP points'}
-            </p>
+            <h2 className="text-2xl font-bold text-white">Doubt Solver</h2>
+            <p className="text-white/40 text-sm mt-1">{doubtList.length} doubts · Click to view and answer</p>
           </div>
-          <motion.button onClick={() => setModalOpen(true)}
-            className="bg-[#7c3aed] rounded-full px-5 py-2.5 text-white text-sm font-medium flex items-center gap-2"
-            whileTap={{ scale: 0.95 }}>
-            <Plus size={18} /> Raise Doubt
+          <motion.button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 bg-[#7c3aed] text-white rounded-full px-5 py-2.5 text-sm font-semibold"
+            whileTap={{ scale: 0.95 }}
+          >
+            <Plus size={16} /> Raise Doubt
           </motion.button>
         </div>
 
-        {loading ? <ListSkeleton count={4} /> : (
-          <div className="space-y-4">
-            {doubts.map((doubt, i) => (
-              <motion.div key={doubt.id} className="glass-card rounded-2xl p-5 cursor-pointer"
-                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
-                whileHover={{ scale: 1.01 }} onClick={() => openDetail(doubt.id)}>
-                <div className="flex items-start gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+        {/* Doubt list */}
+        {loading ? (
+          <ListSkeleton />
+        ) : (
+          <div className="space-y-3">
+            {doubtList.map(doubt => (
+              <motion.div
+                key={doubt.id}
+                className="glass-card rounded-2xl p-5 cursor-pointer"
+                onClick={() => openDetail(doubt.id)}
+                whileTap={{ scale: 0.995 }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-[#7c3aed] text-xs font-semibold uppercase tracking-widest">{doubt.category}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${doubt.status === 'resolved' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{doubt.status}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${doubt.status === 'resolved' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                        {doubt.status}
+                      </span>
                     </div>
-                    <h3 className="text-white font-medium text-base">{doubt.title}</h3>
-                    <p className="text-white/40 text-sm mt-1 line-clamp-2">{doubt.body}</p>
-                    <p className="text-white/20 text-xs mt-2">by {doubt.creator_name} · {new Date(doubt.created_at).toLocaleDateString()}</p>
+                    <h3 className="text-white font-medium text-base leading-snug">{doubt.title}</h3>
+                    <p className="text-white/40 text-sm mt-1.5 leading-relaxed">{doubt.body.slice(0, 110)}{doubt.body.length > 110 ? '…' : ''}</p>
+                    <p className="text-white/20 text-xs mt-2.5">by {doubt.creator_name} · {new Date(doubt.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
                   </div>
-                  <MessageSquare size={18} className="text-white/20 flex-shrink-0 mt-1" />
+                  <div className="flex-shrink-0 text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-white/60 text-xs">{doubt.answers.length} ans</span>
+                      <MessageSquare size={16} className="text-white/25" />
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             ))}
           </div>
         )}
 
-        {/* Raise Doubt Modal */}
+        {/* Detail modal */}
+        <AnimatePresence>
+          {detailId !== null && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="w-full max-w-2xl rounded-3xl overflow-hidden my-6"
+                style={{ background: 'rgba(12,12,22,0.98)', border: '1px solid rgba(124,58,237,0.25)' }}
+                initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.98 }}
+              >
+                {/* Modal header */}
+                <div className="p-6 border-b border-white/10">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="text-[#7c3aed] text-xs font-semibold uppercase tracking-widest">{detail?.category}</span>
+                        <StatusBadge status={detail?.status as AnswerStatus} />
+                      </div>
+                      <h2 className="text-white font-bold text-xl leading-snug">{detail?.title}</h2>
+                      <p className="text-white/40 text-sm mt-2 leading-relaxed">{detail?.body}</p>
+                      <p className="text-white/20 text-xs mt-2">Asked by {detail?.creator_name}</p>
+                    </div>
+                    <button
+                      onClick={() => { setDetailId(null); setDetail(null); setAnswers([]) }}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 flex-shrink-0 transition-all"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Answer filter (only for admins) */}
+                  {isAdmin && <FilterBar filter={answerFilter} onChange={setAnswerFilter} />}
+
+                  {/* Answer input */}
+                  {!isAdmin && (
+                    <form onSubmit={submitAnswer} className="mt-4 flex items-center gap-2">
+                      <input
+                        value={activeAnswer}
+                        onChange={e => setActiveAnswer(e.target.value)}
+                        placeholder="Write an answer..."
+                        className="flex-1 bg-white/5 rounded-full px-5 py-2.5 text-white placeholder:text-white/25 text-sm outline-none border border-white/10 focus:border-[#7c3aed]/50"
+                      />
+                      <motion.button type="submit" disabled={!activeAnswer.trim() || detailLoading} className="bg-[#7c3aed] rounded-full p-2.5 text-white disabled:opacity-40" whileTap={{ scale: 0.9 }}>
+                        <MessageSquare size={18} />
+                      </motion.button>
+                      {isAdmin && (
+                        <motion.button type="button" onClick={handleResolve} disabled={detail?.status === 'resolved'} className="bg-green-600 rounded-full p-2.5 text-white disabled:opacity-40" whileTap={{ scale: 0.9 }} title="Mark resolved">
+                          <CheckCircle2 size={18} />
+                        </motion.button>
+                      )}
+                    </form>
+                  )}
+                </div>
+
+                {/* Answers */}
+                <div className="p-5 space-y-3 max-h-[55vh] overflow-y-auto">
+                  {detailLoading ? (
+                    <Skeleton lines={2} />
+                  ) : filteredAnswers.length === 0 ? (
+                    <p className="text-white/30 text-sm text-center py-8">No answers yet. Be the first!</p>
+                  ) : (
+                    filteredAnswers.map(answer => (
+                      <AnswerCard
+                        key={answer.id}
+                        answer={answer}
+                        isAdmin={isAdmin}
+                        onApprove={handleApprove}
+                        onReject={handleReject}
+                        onUpvote={handleUpvote}
+                      />
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Raise Doubt modal */}
         <AnimatePresence>
           {modalOpen && (
-            <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalOpen(false)}>
-              <motion.div className="glass-card rounded-3xl p-6 w-full max-w-lg"
-                initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }} onClick={e => e.stopPropagation()}>
-                <h3 className="text-white font-semibold text-lg mb-4">Raise a Doubt</h3>
-                <form onSubmit={submitDoubt} className="space-y-4">
-                  <input value={title} onChange={e => setTitle(e.target.value)} placeholder="What's your doubt about?"
-                    className="w-full bg-white/5 rounded-xl px-4 py-3 text-white placeholder:text-white/30 outline-none border border-white/5 focus:border-[#7c3aed]/50 text-sm" required />
-                  <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Describe your issue in detail..." rows={4}
-                    className="w-full bg-white/5 rounded-xl px-4 py-3 text-white placeholder:text-white/30 outline-none border border-white/5 focus:border-[#7c3aed]/50 text-sm resize-none" required />
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => setModalOpen(false)} className="flex-1 glass-card rounded-xl py-3 text-white/60 text-sm">Cancel</button>
-                    <motion.button type="submit" disabled={submitting}
-                      className="flex-1 bg-[#7c3aed] rounded-xl py-3 text-white text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setModalOpen(false)}
+            >
+              <motion.div
+                className="w-full max-w-lg rounded-3xl p-6"
+                style={{ background: 'rgba(12,12,22,0.98)', border: '1px solid rgba(124,58,237,0.3)' }}
+                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 className="text-white font-bold text-lg mb-4">Raise a Doubt</h3>
+                <form onSubmit={submitDoubt} className="space-y-3">
+                  <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="Doubt title"
+                    className="w-full bg-white/5 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm outline-none border border-white/10 focus:border-[#7c3aed]/50"
+                    required
+                  />
+                  <textarea
+                    value={body}
+                    onChange={e => setBody(e.target.value)}
+                    placeholder="Describe your doubt in detail..."
+                    rows={4}
+                    className="w-full bg-white/5 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm outline-none border border-white/10 focus:border-[#7c3aed]/50 resize-none"
+                    required
+                  />
+                  <div className="flex gap-2">
+                    <motion.button type="submit" disabled={submitting || !title || !body}
+                      className="bg-[#7c3aed] rounded-full px-5 py-2.5 text-white text-sm font-semibold disabled:opacity-40"
                       whileTap={{ scale: 0.97 }}>
-                      {submitting ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
+                      {submitting ? 'Submitting…' : 'Submit'}
                     </motion.button>
+                    <button type="button" onClick={() => setModalOpen(false)} className="glass-card rounded-full px-5 py-2.5 text-white/60 text-sm">Cancel</button>
                   </div>
                 </form>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Detail / Answer Thread Modal */}
-        <AnimatePresence>
-          {detailId !== null && (
-            <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDetailId(null)}>
-              <motion.div className="glass-card rounded-3xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto"
-                initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }} onClick={e => e.stopPropagation()}>
-                {detailLoading ? (
-                  <div className="space-y-3 py-4"><Skeleton lines={3} /><Skeleton lines={2} /></div>
-                ) : detail ? (
-                  <>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-[#7c3aed] text-xs font-semibold uppercase tracking-widest">{detail.category}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${detail.status === 'resolved' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{detail.status}</span>
-                    </div>
-                    <h3 className="text-white text-xl font-semibold mb-2">{detail.title}</h3>
-                    <p className="text-white/60 text-sm leading-relaxed mb-1">{detail.body}</p>
-                    <p className="text-white/20 text-xs mb-5">by {detail.creator_name}</p>
-
-                    {/* Answer Filter Bar (admin only) */}
-                    {isAdmin && answers.length > 0 && (
-                      <div className="mb-4">
-                        <FilterBar filter={answerFilter} onChange={setAnswerFilter} />
-                        {/* Answer count summary */}
-                        <div className="flex gap-4 text-xs text-white/30 mb-3">
-                          <span>{answerCounts.pending} pending</span>
-                          <span>{answerCounts.approved} approved</span>
-                          <span>{answerCounts.rejected} rejected</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Answer list */}
-                    <div className="space-y-3 mb-4">
-                      {filteredAnswers.length === 0 ? (
-                        <div className="text-center py-6 text-white/30 text-sm">
-                          {answerFilter === 'all' ? 'No answers yet — be the first!' : `No ${answerFilter} answers`}
-                        </div>
-                      ) : (
-                        filteredAnswers.map((ans) => (
-                          <AnswerCard
-                            key={ans.id}
-                            answer={ans}
-                            isAdmin={isAdmin}
-                            onApprove={handleApprove}
-                            onReject={handleReject}
-                          />
-                        ))
-                      )}
-                    </div>
-
-                    {detail.status !== 'resolved' && (
-                      <form onSubmit={submitAnswer} className="mt-4 flex gap-2">
-                        <input value={activeAnswer} onChange={e => setActiveAnswer(e.target.value)} placeholder="Write an answer..."
-                          className="flex-1 bg-white/5 rounded-full px-5 py-2.5 text-white placeholder:text-white/30 outline-none text-sm" />
-                        <motion.button type="submit" className="bg-[#7c3aed] rounded-full p-2.5 text-white" whileTap={{ scale: 0.9 }}>
-                          <MessageSquare size={18} />
-                        </motion.button>
-                        <motion.button type="button" onClick={handleResolve} className="bg-green-600 rounded-full p-2.5 text-white" whileTap={{ scale: 0.9 }} title="Mark resolved">
-                          <CheckCircle2 size={18} />
-                        </motion.button>
-                      </form>
-                    )}
-
-                    {isAdmin && detail.status === 'resolved' && (
-                      <div className="mt-4 flex items-center gap-2 text-green-400/70 text-xs">
-                        <CheckCircle2 size={13} /> Marked as resolved
-                      </div>
-                    )}
-                  </>
-                ) : null}
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      </main>
     </PageTransition>
   )
 })
